@@ -403,3 +403,11 @@ func (ka *ecdheKeyAgreement) generateClientKeyExchange(config *Config, clientHel
 
 	return preMasterSecret, ckx, nil
 }
+
+// srpKeyAgreement implements the SRP key agreement protocol as defined in
+// https://tools.ietf.org/html/rfc5054. NOTE The RFC uses old and insecure
+// primitives. This implementation is not currently posing as a de facto
+// standard, thus the only suite used and implemented is TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384
+type srpKeyAgreement struct {
+	version uint16
+}

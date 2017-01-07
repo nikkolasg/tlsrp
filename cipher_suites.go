@@ -75,6 +75,8 @@ type cipherSuite struct {
 var cipherSuites = []*cipherSuite{
 	// Ciphersuite order is chosen so that ECDHE comes before plain RSA
 	// and RC4 comes before AES-CBC (because of the Lucky13 attack).
+	// custom srp cipher suite with strongest properties
+	{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384, 32, 0, 4, srpAKA, suiteSHA384 | suiteDefaultOff, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheECDSAKA, suiteECDHE | suiteECDSA | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, 32, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12 | suiteSHA384, nil, nil, aeadAESGCM},
@@ -245,6 +247,12 @@ func ecdheRSAKA(version uint16) keyAgreement {
 	}
 }
 
+func srpAKA(version uint16) keyAgreement {
+	return &srpKeyAgreement{
+		version: version,
+	}
+}
+
 // mutualCipherSuite returns a cipherSuite given a list of supported
 // ciphersuites and the id requested by the peer.
 func mutualCipherSuite(have []uint16, want uint16) *cipherSuite {
@@ -283,6 +291,9 @@ const (
 	TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 uint16 = 0xc02b
 	TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384   uint16 = 0xc030
 	TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 uint16 = 0xc02c
+	// last value indicated in the rfc + 1
+	// https://tools.ietf.org/html/rfc5054#page-9
+	TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384 uint16 = 0xc023
 
 	// TLS_FALLBACK_SCSV isn't a standard cipher suite but an indicator
 	// that the client is doing version fallback. See

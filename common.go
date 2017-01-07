@@ -74,6 +74,7 @@ const (
 	extensionStatusRequest       uint16 = 5
 	extensionSupportedCurves     uint16 = 10
 	extensionSupportedPoints     uint16 = 11
+	extensionSRP                 uint16 = 12
 	extensionSignatureAlgorithms uint16 = 13
 	extensionALPN                uint16 = 16
 	extensionSCT                 uint16 = 18 // https://tools.ietf.org/html/rfc6962#section-6
@@ -163,6 +164,7 @@ type ConnectionState struct {
 	NegotiatedProtocol          string                // negotiated next protocol (from Config.NextProtos)
 	NegotiatedProtocolIsMutual  bool                  // negotiated protocol was advertised by server
 	ServerName                  string                // server name requested by client, if any (server side only)
+	SRPUsername                 string                // SRP authenticated user name
 	PeerCertificates            []*x509.Certificate   // certificate chain presented by remote peer
 	VerifiedChains              [][]*x509.Certificate // verified chains built from PeerCertificates
 	SignedCertificateTimestamps [][]byte              // SCTs from the server, if any
@@ -396,6 +398,12 @@ type Config struct {
 	// for new tickets and any subsequent keys can be used to decrypt old
 	// tickets.
 	sessionTicketKeys []ticketKey
+
+	// SRPClient contains the credential informations of the user
+	SRPClient SRPClient
+	// SRPServer contains the necessary information so the server can lookup
+	// usernames and provide username enumeration defenses
+	SRPServer SRPServer
 }
 
 // ticketKeyNameLen is the number of bytes of identifier that is prepended to
