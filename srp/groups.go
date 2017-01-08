@@ -33,6 +33,12 @@ func (g *Group) Equal(g2 Group) bool {
 	return true
 }
 
+// Len returns the length in bytes of the prime. It's to be used to pad any
+// number of this group before hashing.
+func (g *Group) Len() int {
+	return len(g.N.Bytes())
+}
+
 // Contains return true if t is contained in the list of groups, false
 // otherwise. If gs is nil, RFCGroups is used.
 func (gs Groups) Contains(t Group) bool {
