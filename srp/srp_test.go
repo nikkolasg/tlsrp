@@ -8,6 +8,39 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func b(bs ...byte) []byte {
+	return bs
+}
+
+func TestPad(t *testing.T) {
+	for _, tt := range []struct {
+		Slice    []byte
+		Length   int
+		Panic    bool
+		Expected []byte
+	}{
+		{b(0x01, 0x02), 4, false, b(0x00, 0x00, 0x01, 0x02)},
+		{b(0x01, 0x02), 2, false, b(0x01, 0x02)},
+		{b(0x01, 0x02, 0x03), 2, true, nil},
+	} {
+		testPad(t, tt.Slice, tt.Expected, tt.Length, tt.Panic)
+	}
+}
+
+func testPad(t *testing.T, s, exp []byte, l int, p bool) {
+	defer func() {
+		if e := recover(); e != nil {
+			if !p {
+				t.Error(e)
+			}
+		} else if p {
+			t.Error("Should have panic'd")
+		}
+	}()
+	res := pad(s, l)
+	assert.Equal(t, exp, res)
+}
+
 func TestRandom(t *testing.T) {
 	for _, tt := range []struct {
 		Reader io.Reader
@@ -33,6 +66,8 @@ func testRandom(t *testing.T, r io.Reader, l int, p bool) {
 			if !p {
 				t.Error(e)
 			}
+		} else if p {
+			t.Error("should have panic'd")
 		}
 	}()
 	out := random(l)
