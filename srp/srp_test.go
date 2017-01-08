@@ -1,6 +1,7 @@
 package srp
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"testing"
@@ -10,6 +11,43 @@ import (
 
 func b(bs ...byte) []byte {
 	return bs
+}
+
+func repeat(s string, n int) string {
+	var b = new(bytes.Buffer)
+	for i := 0; i < n; i++ {
+		b.Write([]byte(s))
+	}
+	return b.String()
+}
+
+func TestMakeX(t *testing.T) {
+	var validU = "Chewbacca"
+	var validP = "Falcon"
+	for i, tt := range []struct {
+		User  string
+		Pwd   string
+		Salt  []byte // nil == random
+		Error bool
+	}{
+		{"", "", nil, true},
+		{repeat("i", 500), "", nil, true},
+		{validU, "", nil, true},
+		{validU, repeat("p", 500), nil, true},
+		{validU, validP, nil, false}, // good
+		{validU, validP, random(10), true},
+		{validU, validP, random(SaltSize), false},
+	} {
+		if tt.Salt == nil {
+			tt.Salt = random(SaltSize)
+		}
+		_, err := makeX(tt.User, tt.Pwd, tt.Salt)
+		if tt.Error && err == nil {
+			t.Errorf("%d: should have returned error", i)
+		} else if !tt.Error && err != nil {
+			t.Errorf("%d: should not have returned error %s", i, err)
+		}
+	}
 }
 
 func TestPad(t *testing.T) {

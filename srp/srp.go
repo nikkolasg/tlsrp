@@ -211,10 +211,10 @@ func makeX(username, password string, salt []byte) (*big.Int, error) {
 	if !utf8.ValidString(cont) {
 		return nil, errors.New("username:password not valid utf8")
 	}
-	if len(username) <= 0 || len(password) >= 256 {
+	if len(username) == 0 || len(password) >= 256 {
 		return nil, errors.New("username invalid length")
 	}
-	if len(password) <= 0 || len(password) >= 256 {
+	if len(password) == 0 || len(password) >= 256 {
 		return nil, errors.New("password invalid length")
 	}
 	if len(salt) != SaltSize {
