@@ -21,6 +21,20 @@ func repeat(s string, n int) string {
 	return b.String()
 }
 
+func TestExchange(t *testing.T) {
+	var fakeU = "Luke"
+	var fakeP = "theforce"
+	var group = Group2048
+	db := NewMapLookup()
+	db.Add(fakeU, fakeP, group)
+
+	/* server := NewServerInstance(db)*/
+
+	//smat, err := server.KeyExchange(fakeU)
+	/*require.Nil(t, err)*/
+
+}
+
 func TestMakeX(t *testing.T) {
 	var validU = "Chewbacca"
 	var validP = "Falcon"

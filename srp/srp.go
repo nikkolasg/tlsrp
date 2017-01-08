@@ -80,21 +80,18 @@ func NewClient(username string, allowedGroups *Groups) *Client {
 	}
 }
 
-var ErrInvalidB = errors.New("Invalid B public element from server")
-var ErrUnknownGroup = errors.New("Unknown group given by server")
-var ErrFormatCreds = errors.New("Credentials are not in correct utf-8")
-
 // Material uses the server materials to generate the random component A from
 // the client  as in 2.6 https://tools.ietf.org/html/rfc5054#page-8
 // It returns the shared key, the public part A to send to server, or
 // errInvalidB if the value provided by the // server is wrong (== 0).
 func (c *Client) KeyExchange(password string, m *ServerMaterial) (A, key []byte, err error) {
 	if !c.allowed.Contains(m.Group) {
-		return nil, nil, ErrUnknownGroup
+		return nil, nil, errors.New("Unknown group given by server")
+
 	}
 	B := new(big.Int).SetBytes(m.B)
 	if B.Mod(B, m.Group.N).Cmp(zero) == 0 {
-		return nil, nil, ErrInvalidB
+		return nil, nil, errors.New("Invalid B public element from server")
 	}
 	c.a = new(big.Int).SetBytes(random(RandSize))
 	c.A = new(big.Int).Exp(m.Group.G, c.a, m.Group.N)
@@ -109,7 +106,7 @@ func (c *Client) KeyExchange(password string, m *ServerMaterial) (A, key []byte,
 	k := makeK(m.Group)
 	base := new(big.Int).Exp(m.Group.G, x, m.Group.N)
 	base.Mul(k, base).Mod(base, m.Group.N)
-	base.Sub(toInt(m.B), base).Mod(base, m.Group.N)
+	base.Sub(B, base).Mod(base, m.Group.N)
 	exp := new(big.Int).Mul(u, x)
 	exp.Add(c.a, exp)
 	key = base.Exp(base, exp, m.Group.N).Bytes()
@@ -125,8 +122,7 @@ type Lookup interface {
 }
 
 type UserInfo struct {
-	Verifier []byte
-	Salt     []byte
+	Verifier *Verifier
 	Group    Group
 }
 
@@ -161,16 +157,17 @@ func (s *ServerInstance) KeyExchange(username string) (*ServerMaterial, error) {
 	if !ok {
 		return nil, ErrUnknownUser
 	}
+	s.info = info
 	group := info.Group
 	s.b = toInt(random(RandSize))
 	commit := new(big.Int).Exp(group.G, s.b, group.N)
 	k := makeK(group)
-	v := toInt(info.Verifier)
+	v := toInt(info.Verifier.Hash)
 	left := new(big.Int).Mul(k, v)
 	s.B = commit.Add(left, commit).Mod(commit, group.N)
 
 	return &ServerMaterial{
-		Salt:  info.Salt,
+		Salt:  info.Verifier.Salt,
 		Group: info.Group,
 		B:     s.B.Bytes(),
 	}, nil
@@ -188,7 +185,7 @@ func (s *ServerInstance) Key(A []byte) ([]byte, error) {
 		return nil, errors.New("Material A suspicious")
 	}
 	u := makeU(aint, s.B, group.Len())
-	v := toInt(s.info.Verifier)
+	v := toInt(s.info.Verifier.Hash)
 	base := new(big.Int).Exp(v, u, group.N)
 	base.Mul(base, aint).Exp(base, s.b, group.N)
 	s.key = new(big.Int).Set(base)
@@ -232,15 +229,13 @@ func NewMapLookup() *MapLookup {
 
 // Add an user to the database with the
 func (m *MapLookup) Add(uname, password string, group Group) error {
-	salt := random(SaltSize)
-	x, err := makeX(uname, password, salt)
+
+	v, err := NewVerifier(uname, password, group)
 	if err != nil {
 		return err
 	}
-	v := new(big.Int).Exp(group.G, x, group.N)
 	info := &UserInfo{
-		Verifier: v.Bytes(),
-		Salt:     salt,
+		Verifier: v,
 		Group:    group,
 	}
 	(*m)[uname] = info
