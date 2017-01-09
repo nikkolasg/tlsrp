@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func b(bs ...byte) []byte {
@@ -28,10 +29,18 @@ func TestExchange(t *testing.T) {
 	db := NewMapLookup()
 	db.Add(fakeU, fakeP, group)
 
-	/* server := NewServerInstance(db)*/
+	server := NewServerInstance(db)
+	client := NewClient(fakeU, &RFCGroups)
 
-	//smat, err := server.KeyExchange(fakeU)
-	/*require.Nil(t, err)*/
+	smat, err := server.KeyExchange(fakeU)
+	require.Nil(t, err)
+
+	keyC, A, err := client.KeyExchange(fakeP, smat)
+	require.Nil(t, err)
+
+	keyS, err := server.Key(A)
+	require.Nil(t, err)
+	require.Equal(t, keyC, keyS)
 
 }
 

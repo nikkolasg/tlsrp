@@ -84,7 +84,7 @@ func NewClient(username string, allowedGroups *Groups) *Client {
 // the client  as in 2.6 https://tools.ietf.org/html/rfc5054#page-8
 // It returns the shared key, the public part A to send to server, or
 // errInvalidB if the value provided by the // server is wrong (== 0).
-func (c *Client) KeyExchange(password string, m *ServerMaterial) (A, key []byte, err error) {
+func (c *Client) KeyExchange(password string, m *ServerMaterial) (key, A []byte, err error) {
 	if !c.allowed.Contains(m.Group) {
 		return nil, nil, errors.New("Unknown group given by server")
 
@@ -103,10 +103,10 @@ func (c *Client) KeyExchange(password string, m *ServerMaterial) (A, key []byte,
 	if err != nil {
 		return nil, nil, err
 	}
+	// key = (B - (k * g^x)) ^ (a + (u * x)) % N
 	k := makeK(m.Group)
 	base := new(big.Int).Exp(m.Group.G, x, m.Group.N)
-	base.Mul(k, base).Mod(base, m.Group.N)
-	base.Sub(B, base).Mod(base, m.Group.N)
+	base.Mul(k, base).Sub(B, base)
 	exp := new(big.Int).Mul(u, x)
 	exp.Add(c.a, exp)
 	key = base.Exp(base, exp, m.Group.N).Bytes()
@@ -165,7 +165,6 @@ func (s *ServerInstance) KeyExchange(username string) (*ServerMaterial, error) {
 	v := toInt(info.Verifier.Hash)
 	left := new(big.Int).Mul(k, v)
 	s.B = commit.Add(left, commit).Mod(commit, group.N)
-
 	return &ServerMaterial{
 		Salt:  info.Verifier.Salt,
 		Group: info.Group,
@@ -186,6 +185,7 @@ func (s *ServerInstance) Key(A []byte) ([]byte, error) {
 	}
 	u := makeU(aint, s.B, group.Len())
 	v := toInt(s.info.Verifier.Hash)
+	// key = (A * v^u) ^ b % N
 	base := new(big.Int).Exp(v, u, group.N)
 	base.Mul(base, aint).Exp(base, s.b, group.N)
 	s.key = new(big.Int).Set(base)
