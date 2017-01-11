@@ -10,6 +10,13 @@ type Group struct {
 	G *big.Int
 }
 
+func CreateGroup(N, G []byte) Group {
+	return Group{
+		N: new(big.Int).SetBytes(N),
+		G: new(big.Int).SetBytes(G),
+	}
+}
+
 // SRP groups defined in RFC 5054.
 var (
 	Group1024 Group

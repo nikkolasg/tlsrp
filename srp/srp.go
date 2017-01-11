@@ -26,6 +26,12 @@ const RandSize = 32
 // the exchange. By default, it is set to `crypto/rand.Reader`.
 var Rand io.Reader
 
+// MinUserSize is the minimum size an username must be, inclusive.
+const MinUserSize = 3
+
+// MaxUserSize is the maximum size an username can be, inclusive.
+const MaxUserSize = 255
+
 var zero = big.NewInt(0)
 
 func init() {
@@ -47,7 +53,11 @@ type Verifier struct {
 // it. http://tools.ietf.org/html/rfc5054#section-2.4
 func NewVerifier(username, password string, group Group) (*Verifier, error) {
 	salt := random(SaltSize)
-	x, err := makeX(username, password, salt)
+	inner, err := makeInner(username, password)
+	if err != nil {
+		return nil, err
+	}
+	x, err := makeX(inner, salt)
 	if err != nil {
 		return nil, err
 	}
@@ -61,30 +71,34 @@ func NewVerifier(username, password string, group Group) (*Verifier, error) {
 type Client struct {
 	user    string
 	allowed Groups
+	inner   []byte // H( I || ':' || P)
 	a       *big.Int
 	A       *big.Int
 	m       *ServerMaterial
 }
 
-// NewClient returns a client that is able to proceed on the SRP protocol
-func NewClient(username string, allowedGroups *Groups) *Client {
+// NewClient returns a client that is able to proceed on the SRP protocol. It
+// consumes the password into a hash function so there's no storage of it.
+func NewClient(username, password string, allowedGroups *Groups) (*Client, error) {
 	var grs Groups
 	if allowedGroups == nil {
 		grs = RFCGroups
 	} else {
 		grs = *allowedGroups
 	}
+	inner, err := makeInner(username, password)
 	return &Client{
 		user:    username,
+		inner:   inner,
 		allowed: grs,
-	}
+	}, err
 }
 
 // Material uses the server materials to generate the random component A from
 // the client  as in 2.6 https://tools.ietf.org/html/rfc5054#page-8
 // It returns the shared key, the public part A to send to server, or
 // errInvalidB if the value provided by the // server is wrong (== 0).
-func (c *Client) KeyExchange(password string, m *ServerMaterial) (key, A []byte, err error) {
+func (c *Client) KeyExchange(m *ServerMaterial) (key, A []byte, err error) {
 	if !c.allowed.Contains(m.Group) {
 		return nil, nil, errors.New("Unknown group given by server")
 
@@ -99,7 +113,7 @@ func (c *Client) KeyExchange(password string, m *ServerMaterial) (key, A []byte,
 	A = c.A.Bytes()
 
 	u := makeU(c.A, B, m.Group.Len())
-	x, err := makeX(c.user, password, m.Salt)
+	x, err := makeX(c.inner, m.Salt)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -202,8 +216,7 @@ func makeK(gr Group) *big.Int {
 	return toInt(hash(gr.N.Bytes(), pad(gr.G.Bytes(), gr.Len())))
 }
 
-// x = H( salt || H( username || ':' || password ) )
-func makeX(username, password string, salt []byte) (*big.Int, error) {
+func makeInner(username, password string) ([]byte, error) {
 	cont := username + ":" + password
 	if !utf8.ValidString(cont) {
 		return nil, errors.New("username:password not valid utf8")
@@ -214,10 +227,16 @@ func makeX(username, password string, salt []byte) (*big.Int, error) {
 	if len(password) == 0 || len(password) >= 256 {
 		return nil, errors.New("password invalid length")
 	}
+
+	return hash([]byte(cont)), nil
+}
+
+// x = H( salt || H( username || ':' || password ) )
+func makeX(inner, salt []byte) (*big.Int, error) {
 	if len(salt) != SaltSize {
 		return nil, errors.New("salt invalid length")
 	}
-	return toInt(hash(salt, hash([]byte(cont)))), nil
+	return toInt(hash(salt, inner)), nil
 }
 
 type MapLookup map[string]*UserInfo

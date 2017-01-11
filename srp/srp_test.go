@@ -30,12 +30,13 @@ func TestExchange(t *testing.T) {
 	db.Add(fakeU, fakeP, group)
 
 	server := NewServerInstance(db)
-	client := NewClient(fakeU, &RFCGroups)
+	client, err := NewClient(fakeU, fakeP, &RFCGroups)
+	require.Nil(t, err)
 
 	smat, err := server.KeyExchange(fakeU)
 	require.Nil(t, err)
 
-	keyC, A, err := client.KeyExchange(fakeP, smat)
+	keyC, A, err := client.KeyExchange(smat)
 	require.Nil(t, err)
 
 	keyS, err := server.Key(A)
@@ -48,28 +49,41 @@ func TestMakeX(t *testing.T) {
 	var validU = "Chewbacca"
 	var validP = "Falcon"
 	for i, tt := range []struct {
-		User  string
-		Pwd   string
-		Salt  []byte // nil == random
-		Error bool
+		User   string
+		Pwd    string
+		Salt   []byte // nil == random
+		IError bool
+		XError bool
 	}{
-		{"", "", nil, true},
-		{repeat("i", 500), "", nil, true},
-		{validU, "", nil, true},
-		{validU, repeat("p", 500), nil, true},
-		{validU, validP, nil, false}, // good
-		{validU, validP, random(10), true},
-		{validU, validP, random(SaltSize), false},
+		{"", "", nil, true, true},
+		{repeat("i", 500), "", nil, true, true},
+		{validU, "", nil, true, true},
+		{validU, repeat("p", 500), nil, true, true},
+		{validU, validP, nil, false, false}, // good
+		{validU, validP, random(10), false, true},
+		{validU, validP, random(SaltSize), false, false},
 	} {
 		if tt.Salt == nil {
 			tt.Salt = random(SaltSize)
 		}
-		_, err := makeX(tt.User, tt.Pwd, tt.Salt)
-		if tt.Error && err == nil {
-			t.Errorf("%d: should have returned error", i)
-		} else if !tt.Error && err != nil {
-			t.Errorf("%d: should not have returned error %s", i, err)
+		inner, err := makeInner(tt.User, tt.Pwd)
+		if tt.IError && err == nil {
+			t.Errorf("%d: inner should have returned error", i)
+			continue
+		} else if !tt.IError && err != nil {
+			t.Errorf("%d: inner should not have returned error", i, err)
+			continue
+		} else if err != nil {
+			continue
 		}
+
+		_, err2 := makeX(inner, tt.Salt)
+		if tt.XError && err2 == nil {
+			t.Errorf("%d: should have returned error", i)
+		} else if !tt.XError && err2 != nil {
+			t.Errorf("%d: should not have returned error %s", i, err2)
+		}
+
 	}
 }
 
