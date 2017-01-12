@@ -75,6 +75,7 @@ type Client struct {
 	a       *big.Int
 	A       *big.Int
 	m       *ServerMaterial
+	key     []byte
 }
 
 // NewClient returns a client that is able to proceed on the SRP protocol. It
@@ -103,6 +104,13 @@ func (c *Client) KeyExchange(m *ServerMaterial) (key, A []byte, err error) {
 		return nil, nil, errors.New("Unknown group given by server")
 
 	}
+
+	if len(m.B) != m.Group.Len() {
+		return nil, nil, errors.New("srp invalid B size")
+	} else if len(m.Salt) != SaltSize {
+		return nil, nil, errors.New("srp invalid salt size")
+	}
+
 	B := new(big.Int).SetBytes(m.B)
 	if B.Mod(B, m.Group.N).Cmp(zero) == 0 {
 		return nil, nil, errors.New("Invalid B public element from server")
@@ -124,11 +132,17 @@ func (c *Client) KeyExchange(m *ServerMaterial) (key, A []byte, err error) {
 	exp := new(big.Int).Mul(u, x)
 	exp.Add(c.a, exp)
 	key = base.Exp(base, exp, m.Group.N).Bytes()
+	c.key = key
 	return
 }
 
 func (c *Client) Username() string {
 	return c.user
+}
+
+// Key returns a copy of the key
+func (c *Client) Key() []byte {
+	return append([]byte{}, c.key...)
 }
 
 type Lookup interface {

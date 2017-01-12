@@ -269,6 +269,19 @@ func mutualCipherSuite(have []uint16, want uint16) *cipherSuite {
 	return nil
 }
 
+func isSRPCipherSuite(suite uint16) bool {
+	return TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384 == suite
+}
+
+func containsSRPCipherSuite(suites []uint16) bool {
+	for _, s := range suites {
+		if isSRPCipherSuite(s) {
+			return true
+		}
+	}
+	return false
+}
+
 // A list of cipher suite IDs that are, or have been, implemented by this
 // package.
 //

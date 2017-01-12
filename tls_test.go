@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"internal/testenv"
 	"io"
 	"math"
 	"math/rand"
@@ -20,6 +19,8 @@ import (
 	"testing"
 	"testing/quick"
 	"time"
+
+	"github.com/nikkolasg/tlsrp/srp"
 )
 
 var rsaCertPEM = `-----BEGIN CERTIFICATE-----
@@ -161,6 +162,60 @@ func newLocalListener(t testing.TB) net.Listener {
 		t.Fatal(err)
 	}
 	return ln
+}
+
+func TestSRP(t *testing.T) {
+	var user = "testU"
+	var pwd = "testP"
+	var group = srp.Group4096
+
+	m := srp.NewMapLookup()
+	if err := m.Add(user, pwd, group); err != nil {
+		t.Fatal(err)
+	}
+
+	netListener := newLocalListener(t)
+	listConf := SRPConfigServer(m)
+	listener := NewListener(netListener, listConf)
+
+	addr := listener.Addr().String()
+	defer listener.Close()
+
+	complete := make(chan bool)
+	defer close(complete)
+
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		fmt.Println("conn accepted")
+		buff := make([]byte, 32)
+		_, err = conn.Read(buff)
+
+		<-complete
+		conn.Close()
+	}()
+
+	c, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientConf, err := SRPConfigUser(user, pwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientConf.CipherSuites = []uint16{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384}
+	conn := Client(c, clientConf)
+	fmt.Println("Before handshake...")
+	if err := conn.Handshake(); err != nil {
+		t.Error(err)
+	}
+	_, err = conn.Write([]byte("Hello World"))
+	fmt.Println("After handshake...", err)
+
 }
 
 func TestDialTimeout(t *testing.T) {
@@ -329,7 +384,7 @@ func TestTLSUniqueMatches(t *testing.T) {
 }
 
 func TestVerifyHostname(t *testing.T) {
-	testenv.MustHaveExternalNetwork(t)
+	MustHaveExternalNetwork(t)
 
 	c, err := Dial("tcp", "www.google.com:https", nil)
 	if err != nil {
@@ -355,7 +410,7 @@ func TestVerifyHostname(t *testing.T) {
 }
 
 func TestVerifyHostnameResumed(t *testing.T) {
-	testenv.MustHaveExternalNetwork(t)
+	MustHaveExternalNetwork(t)
 
 	config := &Config{
 		ClientSessionCache: NewLRUClientSessionCache(32),

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 )
 
 // serverHandshakeState contains details of a server handshake in progress.
@@ -47,6 +48,7 @@ func (c *Conn) serverHandshake() error {
 		c: c,
 	}
 	isResume, err := hs.readClientHello()
+	fmt.Println("Server: read client hello", err)
 	if err != nil {
 		return err
 	}
@@ -116,6 +118,7 @@ func (hs *serverHandshakeState) readClientHello() (isResume bool, err error) {
 	c := hs.c
 
 	msg, err := c.readHandshake()
+	fmt.Println("client hello (", err, ")")
 	if err != nil {
 		return false, err
 	}
@@ -204,39 +207,42 @@ Curves:
 		}
 	}
 
-	hs.cert, err = config.getCertificate(&ClientHelloInfo{
-		CipherSuites:    hs.clientHello.cipherSuites,
-		ServerName:      hs.clientHello.serverName,
-		SupportedCurves: hs.clientHello.supportedCurves,
-		SupportedPoints: hs.clientHello.supportedPoints,
-	})
-	if err != nil {
-		c.sendAlert(alertInternalError)
-		return false, err
-	}
-	if hs.clientHello.scts {
-		hs.hello.scts = hs.cert.SignedCertificateTimestamps
-	}
+	if !containsSRPCipherSuite(hs.clientHello.cipherSuites) {
+		hs.cert, err = config.getCertificate(&ClientHelloInfo{
+			CipherSuites:    hs.clientHello.cipherSuites,
+			ServerName:      hs.clientHello.serverName,
+			SupportedCurves: hs.clientHello.supportedCurves,
+			SupportedPoints: hs.clientHello.supportedPoints,
+		})
+		if err != nil {
+			c.sendAlert(alertInternalError)
+			return false, err
+		}
+		if hs.clientHello.scts {
+			hs.hello.scts = hs.cert.SignedCertificateTimestamps
+		}
 
-	if priv, ok := hs.cert.PrivateKey.(crypto.Signer); ok {
-		switch priv.Public().(type) {
-		case *ecdsa.PublicKey:
-			hs.ecdsaOk = true
-		case *rsa.PublicKey:
-			hs.rsaSignOk = true
-		default:
-			c.sendAlert(alertInternalError)
-			return false, fmt.Errorf("tls: unsupported signing key type (%T)", priv.Public())
+		if priv, ok := hs.cert.PrivateKey.(crypto.Signer); ok {
+			switch priv.Public().(type) {
+			case *ecdsa.PublicKey:
+				hs.ecdsaOk = true
+			case *rsa.PublicKey:
+				hs.rsaSignOk = true
+			default:
+				c.sendAlert(alertInternalError)
+				return false, fmt.Errorf("tls: unsupported signing key type (%T)", priv.Public())
+			}
 		}
-	}
-	if priv, ok := hs.cert.PrivateKey.(crypto.Decrypter); ok {
-		switch priv.Public().(type) {
-		case *rsa.PublicKey:
-			hs.rsaDecryptOk = true
-		default:
-			c.sendAlert(alertInternalError)
-			return false, fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
+		if priv, ok := hs.cert.PrivateKey.(crypto.Decrypter); ok {
+			switch priv.Public().(type) {
+			case *rsa.PublicKey:
+				hs.rsaDecryptOk = true
+			default:
+				c.sendAlert(alertInternalError)
+				return false, fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
+			}
 		}
+
 	}
 
 	if hs.checkForResumption() {
@@ -251,7 +257,6 @@ Curves:
 		preferenceList = hs.clientHello.cipherSuites
 		supportedList = c.config.cipherSuites()
 	}
-
 	for _, id := range preferenceList {
 		if hs.setCipherSuite(id, supportedList, c.vers) {
 			break
@@ -357,7 +362,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	config := hs.c.config
 	c := hs.c
 
-	if hs.clientHello.ocspStapling && len(hs.cert.OCSPStaple) > 0 {
+	if hs.clientHello.ocspStapling && hs.cert != nil && len(hs.cert.OCSPStaple) > 0 {
 		hs.hello.ocspStapling = true
 	}
 
@@ -375,12 +380,17 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	if _, err := c.writeRecord(recordTypeHandshake, hs.hello.marshal()); err != nil {
 		return err
 	}
+	fmt.Printf("Server: wrote server hello (suite %x)\n", hs.suite.id)
 
-	certMsg := new(certificateMsg)
-	certMsg.certificates = hs.cert.Certificate
-	hs.finishedHash.Write(certMsg.marshal())
-	if _, err := c.writeRecord(recordTypeHandshake, certMsg.marshal()); err != nil {
-		return err
+	var certMsg *certificateMsg
+	// XXX No certificate for the moment
+	if !isSRPCipherSuite(hs.suite.id) {
+		certMsg = new(certificateMsg)
+		certMsg.certificates = hs.cert.Certificate
+		hs.finishedHash.Write(certMsg.marshal())
+		if _, err := c.writeRecord(recordTypeHandshake, certMsg.marshal()); err != nil {
+			return err
+		}
 	}
 
 	if hs.hello.ocspStapling {
@@ -399,7 +409,9 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		c.sendAlert(alertHandshakeFailure)
 		return err
 	}
+
 	if skx != nil {
+		fmt.Printf("Server: writing server key exchange\n")
 		hs.finishedHash.Write(skx.marshal())
 		if _, err := c.writeRecord(recordTypeHandshake, skx.marshal()); err != nil {
 			return err
@@ -444,7 +456,12 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	var pub crypto.PublicKey // public key for client auth, if any
 
-	msg, err := c.readHandshake()
+	var msg interface{}
+	if isSRPCipherSuite(hs.suite.id) {
+		msg, err = c.readSRPKeyExchange()
+	} else {
+		msg, err = c.readHandshake()
+	}
 	if err != nil {
 		return err
 	}
@@ -481,6 +498,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	// Get client key exchange
 	ckx, ok := msg.(*clientKeyExchangeMsg)
+	fmt.Printf("Server: read ClientKeyExchange ok %v,%s\n", ok, reflect.TypeOf(msg)) // %v, %x\n", ckx.srpExchange, ckx.A)
 	if !ok {
 		c.sendAlert(alertUnexpectedMessage)
 		return unexpectedMessageError(ckx, msg)
@@ -488,6 +506,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	hs.finishedHash.Write(ckx.marshal())
 
 	preMasterSecret, err := keyAgreement.processClientKeyExchange(config, hs.cert, ckx, c.vers)
+	fmt.Printf("Server: processClientKeyEx: %s, => %x", err, preMasterSecret)
 	if err != nil {
 		c.sendAlert(alertHandshakeFailure)
 		return err
@@ -763,6 +782,8 @@ func (hs *serverHandshakeState) setCipherSuite(id uint16, supportedCipherSuites 
 			if candidate == nil {
 				continue
 			}
+
+			fmt.Println("AT LEAST HERE")
 			// Don't select a ciphersuite which we can't
 			// support for this client.
 			if candidate.flags&suiteECDHE != 0 {
@@ -776,7 +797,7 @@ func (hs *serverHandshakeState) setCipherSuite(id uint16, supportedCipherSuites 
 				} else if !hs.rsaSignOk {
 					continue
 				}
-			} else if !hs.rsaDecryptOk {
+			} else if !hs.rsaDecryptOk && !isSRPCipherSuite(candidate.id) {
 				continue
 			}
 			if version < VersionTLS12 && candidate.flags&suiteTLS12 != 0 {

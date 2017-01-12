@@ -4,7 +4,12 @@
 
 package tls
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/nikkolasg/tlsrp/srp"
+)
 
 type clientHelloMsg struct {
 	raw                          []byte
@@ -25,6 +30,7 @@ type clientHelloMsg struct {
 	secureRenegotiation          []byte
 	secureRenegotiationSupported bool
 	alpnProtocols                []string
+	srpUser                      string
 }
 
 func (m *clientHelloMsg) equal(i interface{}) bool {
@@ -50,7 +56,8 @@ func (m *clientHelloMsg) equal(i interface{}) bool {
 		eqSignatureAndHashes(m.signatureAndHashes, m1.signatureAndHashes) &&
 		m.secureRenegotiationSupported == m1.secureRenegotiationSupported &&
 		bytes.Equal(m.secureRenegotiation, m1.secureRenegotiation) &&
-		eqStrings(m.alpnProtocols, m1.alpnProtocols)
+		eqStrings(m.alpnProtocols, m1.alpnProtocols) &&
+		m.srpUser == m1.srpUser
 }
 
 func (m *clientHelloMsg) marshal() []byte {
@@ -104,6 +111,10 @@ func (m *clientHelloMsg) marshal() []byte {
 		numExtensions++
 	}
 	if m.scts {
+		numExtensions++
+	}
+	if m.srpUser != "" {
+		extensionsLength += len(m.srpUser)
 		numExtensions++
 	}
 	if numExtensions > 0 {
@@ -288,6 +299,23 @@ func (m *clientHelloMsg) marshal() []byte {
 		// zero uint16 for the zero-length extension_data
 		z = z[4:]
 	}
+	if m.srpUser != "" {
+		// http://tools.ietf.org/html/rfc5054#section-2.8
+		// write extension
+		z[0] = byte(extensionSRP >> 8)
+		z[1] = byte(extensionSRP)
+		// write length
+		z = z[2:]
+		l := len(m.srpUser)
+		b := []byte(m.srpUser)
+		// XXX in ref implementation go-tls-srp, they write
+		// l = len() + 1, and [l>>8,l,len()] ... why!?
+		z[0] = byte(l >> 8)
+		z[1] = byte(l)
+		// write username
+		copy(z[2:], b)
+		z = z[2+l:]
+	}
 
 	m.raw = x
 
@@ -344,6 +372,7 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 	m.signatureAndHashes = nil
 	m.alpnProtocols = nil
 	m.scts = false
+	m.srpUser = ""
 
 	if len(data) == 0 {
 		// ClientHello is optionally followed by extension data
@@ -488,6 +517,14 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 			if length != 0 {
 				return false
 			}
+		case extensionSRP:
+			if length < srp.MinUserSize || length > srp.MaxUserSize {
+				return false
+			}
+			if len(data) < length {
+				return false
+			}
+			m.srpUser = string(data[:length])
 		}
 		data = data[length:]
 	}
@@ -918,7 +955,15 @@ func (m *certificateMsg) unmarshal(data []byte) bool {
 
 type serverKeyExchangeMsg struct {
 	raw []byte
-	key []byte
+	// either key or (N,G,s,B)
+	// handshake client set this bool when using srp
+	srpExchange bool
+	key         []byte
+	//https://tools.ietf.org/html/rfc5054#page-7
+	N []byte
+	G []byte
+	s []byte
+	B []byte
 }
 
 func (m *serverKeyExchangeMsg) equal(i interface{}) bool {
@@ -926,25 +971,69 @@ func (m *serverKeyExchangeMsg) equal(i interface{}) bool {
 	if !ok {
 		return false
 	}
+	eq := bytes.Equal
+	if !eq(m.raw, m1.raw) {
+		return false
+	}
+	if !m.srpExchange {
+		return eq(m.key, m1.key)
+	}
 
-	return bytes.Equal(m.raw, m1.raw) &&
-		bytes.Equal(m.key, m1.key)
+	return eq(m.N, m1.N) && eq(m.G, m1.G) &&
+		eq(m.s, m1.s) && eq(m.B, m1.B)
+
 }
 
 func (m *serverKeyExchangeMsg) marshal() []byte {
 	if m.raw != nil {
 		return m.raw
 	}
-	length := len(m.key)
-	x := make([]byte, length+4)
+	var length int
+	var x []byte
+	if !m.srpExchange {
+		length = len(m.key)
+	} else {
+		length = 2 + len(m.N) + 2 + len(m.G) + 2 + len(m.s) + 2 + len(m.B)
+	}
+	x = make([]byte, length+4)
 	x[0] = typeServerKeyExchange
 	x[1] = uint8(length >> 16)
 	x[2] = uint8(length >> 8)
 	x[3] = uint8(length)
-	copy(x[4:], m.key)
 
+	if !m.srpExchange {
+		copy(x[4:], m.key)
+	} else {
+		a := x[4:]
+		writeShort(a, m.N)
+		a = a[len(m.N)+2:]
+		writeShort(a, m.G)
+		a = a[len(m.G)+2:]
+		writeShort(a, m.s)
+		a = a[len(m.s)+2:]
+		writeShort(a, m.B)
+	}
 	m.raw = x
 	return x
+}
+
+func writeShort(dst, src []byte) {
+	length := len(src)
+	dst[0] = byte(length >> 8)
+	dst[1] = byte(length)
+	copy(dst[2:], src)
+}
+
+func readShort(src []byte) ([]byte, int, bool) {
+	if len(src) < 2 {
+		return nil, 0, false
+	}
+	var length = int(src[0])<<8 | int(src[1])
+	src = src[2:]
+	if len(src) < length {
+		return nil, 2, false
+	}
+	return src[:length], length + 2, true
 }
 
 func (m *serverKeyExchangeMsg) unmarshal(data []byte) bool {
@@ -952,7 +1041,28 @@ func (m *serverKeyExchangeMsg) unmarshal(data []byte) bool {
 	if len(data) < 4 {
 		return false
 	}
-	m.key = data[4:]
+	data = data[4:]
+	if !m.srpExchange {
+		m.key = data
+	} else {
+		var ok bool
+		var l int
+		if m.N, l, ok = readShort(data); !ok {
+			return false
+		}
+		data = data[l:]
+		if m.G, l, ok = readShort(data); !ok {
+			return false
+		}
+		data = data[l:]
+		if m.s, l, ok = readShort(data); !ok {
+			return false
+		}
+		data = data[l:]
+		if m.B, l, ok = readShort(data); !ok {
+			return false
+		}
+	}
 	return true
 }
 
@@ -1040,8 +1150,12 @@ func (m *serverHelloDoneMsg) unmarshal(data []byte) bool {
 }
 
 type clientKeyExchangeMsg struct {
-	raw        []byte
-	ciphertext []byte
+	raw []byte
+	// specifying if it should be parsed as srp or normal
+	srpExchange bool
+	ciphertext  []byte
+	// https://tools.ietf.org/html/rfc5054#page-11
+	A []byte
 }
 
 func (m *clientKeyExchangeMsg) equal(i interface{}) bool {
@@ -1049,22 +1163,38 @@ func (m *clientKeyExchangeMsg) equal(i interface{}) bool {
 	if !ok {
 		return false
 	}
+	eq := bytes.Equal
+	if !eq(m.raw, m1.raw) {
+		return false
+	}
 
-	return bytes.Equal(m.raw, m1.raw) &&
-		bytes.Equal(m.ciphertext, m1.ciphertext)
+	if !m.srpExchange {
+		return eq(m.ciphertext, m1.ciphertext)
+	}
+	return eq(m.A, m1.A)
 }
 
 func (m *clientKeyExchangeMsg) marshal() []byte {
 	if m.raw != nil {
 		return m.raw
 	}
-	length := len(m.ciphertext)
+	var length int
+	if !m.srpExchange {
+		length = len(m.ciphertext)
+	} else {
+		length = len(m.A)
+	}
 	x := make([]byte, length+4)
 	x[0] = typeClientKeyExchange
 	x[1] = uint8(length >> 16)
 	x[2] = uint8(length >> 8)
 	x[3] = uint8(length)
-	copy(x[4:], m.ciphertext)
+	if !m.srpExchange {
+		copy(x[4:], m.ciphertext)
+	} else {
+		fmt.Printf("Client: SERVERKEYEXCHANGE A: %x\n", m.A)
+		copy(x[4:], m.A)
+	}
 
 	m.raw = x
 	return x
@@ -1079,7 +1209,12 @@ func (m *clientKeyExchangeMsg) unmarshal(data []byte) bool {
 	if l != len(data)-4 {
 		return false
 	}
-	m.ciphertext = data[4:]
+	if !m.srpExchange {
+		m.ciphertext = data[4:]
+	} else {
+		m.A = data[4:]
+		fmt.Printf("Server: SERVERKEYEXCHANGE A: %x\n", m.A)
+	}
 	return true
 }
 

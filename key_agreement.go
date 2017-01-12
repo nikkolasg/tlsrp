@@ -16,6 +16,8 @@ import (
 	"errors"
 	"io"
 	"math/big"
+
+	"github.com/nikkolasg/tlsrp/srp"
 )
 
 var errClientKeyExchange = errors.New("tls: invalid ClientKeyExchange message")
@@ -409,5 +411,63 @@ func (ka *ecdheKeyAgreement) generateClientKeyExchange(config *Config, clientHel
 // primitives. This implementation is not currently posing as a de facto
 // standard, thus the only suite used and implemented is TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384
 type srpKeyAgreement struct {
-	version uint16
+	version     uint16
+	srpInstance *srp.ServerInstance
+}
+
+func (s *srpKeyAgreement) processServerKeyExchange(c *Config, ch *clientHelloMsg, sh *serverHelloMsg, cert *x509.Certificate, skx *serverKeyExchangeMsg) error {
+	if c.SRPClient == nil {
+		return errors.New("tls: missing srp client")
+	} else if !skx.srpExchange {
+		return errors.New("tls: no srp server exchange")
+	}
+	// precautions already taken in the srp library
+	mat := &srp.ServerMaterial{
+		Salt:  skx.s,
+		B:     skx.B,
+		Group: srp.CreateGroup(skx.N, skx.G),
+	}
+
+	_, _, err := c.SRPClient.KeyExchange(mat)
+	return err
+}
+
+func (s *srpKeyAgreement) generateClientKeyExchange(c *Config, ch *clientHelloMsg, cert *x509.Certificate) ([]byte, *clientKeyExchangeMsg, error) {
+	if c.SRPClient == nil {
+		return nil, nil, errors.New("tls: missing srp client")
+	}
+	cxm := new(clientKeyExchangeMsg)
+	cxm.A = c.SRPClient.A.Bytes()
+	cxm.srpExchange = true
+	return c.SRPClient.Key(), cxm, nil
+}
+
+func (s *srpKeyAgreement) generateServerKeyExchange(c *Config, cert *Certificate, ch *clientHelloMsg, sh *serverHelloMsg) (*serverKeyExchangeMsg, error) {
+	if c.SRPLookup == nil {
+		return nil, errors.New("tls: missing srp lookup")
+	}
+	s.srpInstance = srp.NewServerInstance(c.SRPLookup)
+	mat, err := s.srpInstance.KeyExchange(ch.srpUser)
+	if err != nil {
+		return nil, err
+	}
+
+	skem := new(serverKeyExchangeMsg)
+	skem.srpExchange = true
+	skem.N = mat.Group.N.Bytes()
+	skem.G = mat.Group.G.Bytes()
+	skem.s = mat.Salt
+	skem.B = mat.B
+	return skem, nil
+}
+
+func (s *srpKeyAgreement) processClientKeyExchange(c *Config, cert *Certificate, ckex *clientKeyExchangeMsg, version uint16) ([]byte, error) {
+	// f*** everybody, no tls inferior to 1.2
+	if version < VersionTLS12 {
+		return nil, errors.New("tls: srp no support for version inferior to 1.2")
+	}
+	if ckex.A == nil {
+		return nil, errors.New("tls: no A given in client key exchange")
+	}
+	return s.srpInstance.Key(ckex.A)
 }

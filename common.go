@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nikkolasg/tlsrp/srp"
 )
 
 const (
@@ -268,6 +270,28 @@ const (
 	RenegotiateFreelyAsClient
 )
 
+func SRPConfigUser(user, pwd string) (*Config, error) {
+	srpClient, err := srp.NewClient(user, pwd, &srp.RFCGroups)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{
+		SRPClient:    srpClient,
+		MinVersion:   VersionTLS12,
+		CipherSuites: []uint16{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384},
+	}, nil
+}
+
+func SRPConfigServer(lookup srp.Lookup) *Config {
+	return &Config{
+		SRPLookup:                lookup,
+		PreferServerCipherSuites: true,
+		MinVersion:               VersionTLS12,
+		CipherSuites:             []uint16{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384},
+	}
+}
+
 // A Config structure is used to configure a TLS client or server.
 // After one has been passed to a TLS function it must not be
 // modified. A Config may be reused; the tls package will also not
@@ -400,10 +424,10 @@ type Config struct {
 	sessionTicketKeys []ticketKey
 
 	// SRPClient contains the credential informations of the user
-	SRPClient SRPClient
-	// SRPServer contains the necessary information so the server can lookup
+	SRPClient *srp.Client
+	// SRPLookup contains the necessary information so the server can lookup
 	// usernames and provide username enumeration defenses
-	SRPServer SRPServer
+	SRPLookup srp.Lookup
 }
 
 // ticketKeyNameLen is the number of bytes of identifier that is prepended to

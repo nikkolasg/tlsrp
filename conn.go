@@ -918,16 +918,13 @@ func (c *Conn) writeRecord(typ recordType, data []byte) (int, error) {
 	return c.writeRecordLocked(typ, data)
 }
 
-// readHandshake reads the next handshake message from
-// the record layer.
-// c.in.Mutex < L; c.out.Mutex < L.
-func (c *Conn) readHandshake() (interface{}, error) {
+func (c *Conn) readWithoutParsing() ([]byte, handshakeMessage, error) {
 	for c.hand.Len() < 4 {
 		if err := c.in.err; err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := c.readRecord(recordTypeHandshake); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -935,14 +932,14 @@ func (c *Conn) readHandshake() (interface{}, error) {
 	n := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
 	if n > maxHandshake {
 		c.sendAlertLocked(alertInternalError)
-		return nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
+		return nil, nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
 	}
 	for c.hand.Len() < 4+n {
 		if err := c.in.err; err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := c.readRecord(recordTypeHandshake); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 	data = c.hand.Next(4 + n)
@@ -979,13 +976,45 @@ func (c *Conn) readHandshake() (interface{}, error) {
 	case typeFinished:
 		m = new(finishedMsg)
 	default:
-		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
+		return nil, nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
 	}
 
 	// The handshake message unmarshallers
 	// expect to be able to keep references to data,
 	// so pass in a fresh copy that won't be overwritten.
 	data = append([]byte(nil), data...)
+	return data, m, nil
+}
+
+// readHandshake reads the next handshake message from
+// the record layer.
+// c.in.Mutex < L; c.out.Mutex < L.
+func (c *Conn) readHandshake() (interface{}, error) {
+	data, m, err := c.readWithoutParsing()
+	if err != nil {
+		return nil, err
+	}
+
+	if !m.unmarshal(data) {
+		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
+	}
+	return m, nil
+}
+
+func (c *Conn) readSRPKeyExchange() (interface{}, error) {
+	data, m, err := c.readWithoutParsing()
+	if err != nil {
+		return nil, err
+	}
+	serverKx, ok := m.(*serverKeyExchangeMsg)
+	if ok {
+		serverKx.srpExchange = true
+	} else if clientKx, ok := m.(*clientKeyExchangeMsg); ok {
+		fmt.Println(" PARSED Client Key Exchange Msg")
+		clientKx.srpExchange = true
+	} else {
+		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
+	}
 
 	if !m.unmarshal(data) {
 		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
