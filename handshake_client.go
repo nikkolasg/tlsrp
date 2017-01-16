@@ -285,13 +285,13 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	var msg interface{}
 	var err error
 
-	if !isSRPCipherSuite(hs.suite.id) {
+	if c.config.SRPRequireCert {
+		fmt.Println("Client: read certificate Msg")
 		msg, err := c.readHandshake()
 		if err != nil {
 			return err
 		}
 
-		// XXX TODO no certificate signatures is yet implemented
 		certMsg, ok := msg.(*certificateMsg)
 		if !ok || len(certMsg.certificates) == 0 {
 			c.sendAlert(alertUnexpectedMessage)
@@ -369,8 +369,8 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 				c.ocspResponse = cs.response
 			}
 		}
-		msg, err = c.readHandshake()
 	} else {
+		fmt.Println("Client: read srp server key exchange")
 		msg, err = c.readSRPKeyExchange()
 	}
 
@@ -378,7 +378,7 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		return err
 	}
 	var cert *x509.Certificate = nil
-	if !isSRPCipherSuite(hs.suite.id) {
+	if c.config.SRPRequireCert {
 		cert = c.peerCertificates[0]
 	}
 	keyAgreement := hs.suite.ka(c.vers)
@@ -469,7 +469,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 				}
 			}
 		}
-
 		msg, err = c.readHandshake()
 		if err != nil {
 			return err
@@ -554,7 +553,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		}
 	}
 
-	fmt.Println("Client HEEERRREEE")
 	hs.masterSecret = masterFromPreMasterSecret(c.vers, hs.suite, preMasterSecret, hs.hello.random, hs.serverHello.random)
 
 	hs.finishedHash.discardHandshakeBuffer()

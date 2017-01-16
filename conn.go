@@ -1010,7 +1010,6 @@ func (c *Conn) readSRPKeyExchange() (interface{}, error) {
 	if ok {
 		serverKx.srpExchange = true
 	} else if clientKx, ok := m.(*clientKeyExchangeMsg); ok {
-		fmt.Println(" PARSED Client Key Exchange Msg")
 		clientKx.srpExchange = true
 	} else {
 		return nil, c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))

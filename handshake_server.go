@@ -361,6 +361,8 @@ func (hs *serverHandshakeState) doResumeHandshake() error {
 func (hs *serverHandshakeState) doFullHandshake() error {
 	config := hs.c.config
 	c := hs.c
+	// if a certificate has been supplied, then use it with SRP too.
+	srpCert := len(c.config.Certificates) != 0
 
 	if hs.clientHello.ocspStapling && hs.cert != nil && len(hs.cert.OCSPStaple) > 0 {
 		hs.hello.ocspStapling = true
@@ -383,8 +385,7 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	fmt.Printf("Server: wrote server hello (suite %x)\n", hs.suite.id)
 
 	var certMsg *certificateMsg
-	// XXX No certificate for the moment
-	if !isSRPCipherSuite(hs.suite.id) {
+	if srpCert {
 		certMsg = new(certificateMsg)
 		certMsg.certificates = hs.cert.Certificate
 		hs.finishedHash.Write(certMsg.marshal())
@@ -418,7 +419,8 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 		}
 	}
 
-	if config.ClientAuth >= RequestClientCert {
+	// XXX for the moment, it doesn't request a certificate from the client
+	if config.ClientAuth >= RequestClientCert && !isSRPCipherSuite(hs.suite.id) {
 		// Request a client certificate
 		certReq := new(certificateRequestMsg)
 		certReq.certificateTypes = []byte{
@@ -469,7 +471,8 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	var ok bool
 	// If we requested a client certificate, then the client must send a
 	// certificate message, even if it's empty.
-	if config.ClientAuth >= RequestClientCert {
+	// XXX Same, no client cert for the moment
+	if config.ClientAuth >= RequestClientCert && config.SRPLookup == nil {
 		if certMsg, ok = msg.(*certificateMsg); !ok {
 			c.sendAlert(alertUnexpectedMessage)
 			return unexpectedMessageError(certMsg, msg)
