@@ -72,11 +72,14 @@ type cipherSuite struct {
 	aead   func(key, fixedNonce []byte) cipher.AEAD
 }
 
+// custom srp cipher suite with strongest properties
+var srpCipherSuite = []*cipherSuite{
+	{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384, 32, 0, 4, srpAKA, suiteSHA384 | suiteDefaultOff, nil, nil, aeadAESGCM},
+}
+
 var cipherSuites = []*cipherSuite{
 	// Ciphersuite order is chosen so that ECDHE comes before plain RSA
 	// and RC4 comes before AES-CBC (because of the Lucky13 attack).
-	// custom srp cipher suite with strongest properties
-	{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384, 32, 0, 4, srpAKA, suiteSHA384 | suiteDefaultOff, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256, 16, 0, 4, ecdheECDSAKA, suiteECDHE | suiteECDSA | suiteTLS12, nil, nil, aeadAESGCM},
 	{TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384, 32, 0, 4, ecdheRSAKA, suiteECDHE | suiteTLS12 | suiteSHA384, nil, nil, aeadAESGCM},

@@ -549,6 +549,14 @@ func TestClone(t *testing.T) {
 		case "ClientSessionCache":
 			f.Set(reflect.ValueOf(NewLRUClientSessionCache(10)))
 			continue
+		case "SRPClient":
+			c, _ := srp.NewClient("bobby", "mcferrin", nil)
+			f.Set(reflect.ValueOf(c))
+			continue
+		case "SRPLookup":
+			l := srp.NewMapLookup()
+			f.Set(reflect.ValueOf(l))
+			continue
 		}
 
 		q, ok := quick.Value(f.Type(), rnd)

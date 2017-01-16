@@ -406,11 +406,13 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	keyAgreement := hs.suite.ka(c.vers)
 	skx, err := keyAgreement.generateServerKeyExchange(config, hs.cert, hs.clientHello, hs.hello)
+	fmt.Println("Server: server key exchange agreement() : err(", err, "), skx:", reflect.TypeOf(skx))
 	if err != nil {
 		c.sendAlert(alertHandshakeFailure)
 		return err
 	}
 
+	fmt.Println("Server: writing ?", skx)
 	if skx != nil {
 		fmt.Printf("Server: writing server key exchange\n")
 		hs.finishedHash.Write(skx.marshal())

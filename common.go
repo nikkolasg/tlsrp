@@ -482,6 +482,9 @@ func (c *Config) clone() *Config {
 		CurvePreferences:            c.CurvePreferences,
 		DynamicRecordSizingDisabled: c.DynamicRecordSizingDisabled,
 		Renegotiation:               c.Renegotiation,
+		SRPClient:                   c.SRPClient,
+		SRPRequireCert:              c.SRPRequireCert,
+		SRPLookup:                   c.SRPLookup,
 	}
 }
 
