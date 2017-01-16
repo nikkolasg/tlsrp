@@ -413,7 +413,6 @@ func (test *clientTest) run(t *testing.T, write bool) {
 			t.Fatalf("Client connection didn't work")
 		}
 		recordingConn.WriteTo(out)
-		fmt.Printf("Wrote %s\n", path)
 	}
 }
 

@@ -190,7 +190,6 @@ func TestSRP(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		fmt.Println("conn accepted")
 		buff := make([]byte, 32)
 		_, err = conn.Read(buff)
 
@@ -209,12 +208,10 @@ func TestSRP(t *testing.T) {
 	}
 	clientConf.CipherSuites = []uint16{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384}
 	conn := Client(c, clientConf)
-	fmt.Println("Before handshake...")
 	if err := conn.Handshake(); err != nil {
 		t.Error(err)
 	}
 	_, err = conn.Write([]byte("Hello World"))
-	fmt.Println("After handshake...", err)
 
 }
 

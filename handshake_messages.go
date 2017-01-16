@@ -6,7 +6,6 @@ package tls
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/nikkolasg/tlsrp/srp"
 )
@@ -1192,7 +1191,6 @@ func (m *clientKeyExchangeMsg) marshal() []byte {
 	if !m.srpExchange {
 		copy(x[4:], m.ciphertext)
 	} else {
-		fmt.Printf("Client: SERVERKEYEXCHANGE A: %x\n", m.A)
 		copy(x[4:], m.A)
 	}
 
@@ -1213,7 +1211,6 @@ func (m *clientKeyExchangeMsg) unmarshal(data []byte) bool {
 		m.ciphertext = data[4:]
 	} else {
 		m.A = data[4:]
-		fmt.Printf("Server: SERVERKEYEXCHANGE A: %x\n", m.A)
 	}
 	return true
 }

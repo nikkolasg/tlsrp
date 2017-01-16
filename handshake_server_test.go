@@ -652,7 +652,6 @@ func (test *serverTest) run(t *testing.T, write bool) {
 			}
 		}
 		recordingConn.WriteTo(out)
-		fmt.Printf("Wrote %s\n", path)
 		childProcess.Wait()
 	}
 }

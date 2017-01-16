@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"reflect"
 )
 
 // serverHandshakeState contains details of a server handshake in progress.
@@ -48,7 +47,6 @@ func (c *Conn) serverHandshake() error {
 		c: c,
 	}
 	isResume, err := hs.readClientHello()
-	fmt.Println("Server: read client hello", err)
 	if err != nil {
 		return err
 	}
@@ -118,7 +116,6 @@ func (hs *serverHandshakeState) readClientHello() (isResume bool, err error) {
 	c := hs.c
 
 	msg, err := c.readHandshake()
-	fmt.Println("client hello (", err, ")")
 	if err != nil {
 		return false, err
 	}
@@ -382,7 +379,6 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	if _, err := c.writeRecord(recordTypeHandshake, hs.hello.marshal()); err != nil {
 		return err
 	}
-	fmt.Printf("Server: wrote server hello (suite %x)\n", hs.suite.id)
 
 	var certMsg *certificateMsg
 	if srpCert {
@@ -406,15 +402,12 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	keyAgreement := hs.suite.ka(c.vers)
 	skx, err := keyAgreement.generateServerKeyExchange(config, hs.cert, hs.clientHello, hs.hello)
-	fmt.Println("Server: server key exchange agreement() : err(", err, "), skx:", reflect.TypeOf(skx))
 	if err != nil {
 		c.sendAlert(alertHandshakeFailure)
 		return err
 	}
 
-	fmt.Println("Server: writing ?", skx)
 	if skx != nil {
-		fmt.Printf("Server: writing server key exchange\n")
 		hs.finishedHash.Write(skx.marshal())
 		if _, err := c.writeRecord(recordTypeHandshake, skx.marshal()); err != nil {
 			return err
@@ -503,7 +496,6 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 
 	// Get client key exchange
 	ckx, ok := msg.(*clientKeyExchangeMsg)
-	fmt.Printf("Server: read ClientKeyExchange ok %v,%s\n", ok, reflect.TypeOf(msg)) // %v, %x\n", ckx.srpExchange, ckx.A)
 	if !ok {
 		c.sendAlert(alertUnexpectedMessage)
 		return unexpectedMessageError(ckx, msg)
@@ -511,7 +503,6 @@ func (hs *serverHandshakeState) doFullHandshake() error {
 	hs.finishedHash.Write(ckx.marshal())
 
 	preMasterSecret, err := keyAgreement.processClientKeyExchange(config, hs.cert, ckx, c.vers)
-	fmt.Printf("Server: processClientKeyEx: %s, => %x", err, preMasterSecret)
 	if err != nil {
 		c.sendAlert(alertHandshakeFailure)
 		return err
@@ -788,7 +779,6 @@ func (hs *serverHandshakeState) setCipherSuite(id uint16, supportedCipherSuites 
 				continue
 			}
 
-			fmt.Println("AT LEAST HERE")
 			// Don't select a ciphersuite which we can't
 			// support for this client.
 			if candidate.flags&suiteECDHE != 0 {

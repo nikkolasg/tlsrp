@@ -177,10 +177,8 @@ NextCipherSuite:
 	if _, err := c.writeRecord(recordTypeHandshake, hello.marshal()); err != nil {
 		return err
 	}
-	fmt.Println("Client: wrote hello message")
 
 	msg, err := c.readHandshake()
-	fmt.Println("Client: read server hello message", err)
 	if err != nil {
 		return err
 	}
@@ -289,15 +287,12 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	var useCert = !isSRP || c.config.SRPRequireCert
 
 	if useCert {
-		fmt.Println("Client: read certificate Msg")
 		msg, err := c.readHandshake()
 		if err != nil {
 			return err
 		}
-		fmt.Println("HERE #1")
 		certMsg, ok := msg.(*certificateMsg)
 		if !ok || len(certMsg.certificates) == 0 {
-			fmt.Println("HERE #2")
 			c.sendAlert(alertUnexpectedMessage)
 			return unexpectedMessageError(certMsg, msg)
 		}
@@ -360,13 +355,11 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	}
 	if hs.serverHello.ocspStapling {
 		msg, err = c.readHandshake()
-		fmt.Println("HERE #4")
 		if err != nil {
 			return err
 		}
 		cs, ok := msg.(*certificateStatusMsg)
 		if !ok {
-			fmt.Println("HERE #5")
 			c.sendAlert(alertUnexpectedMessage)
 			return unexpectedMessageError(cs, msg)
 		}
@@ -378,13 +371,10 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	}
 
 	if isSRP {
-		fmt.Println("Client: read srp server key exchange")
 		msg, err = c.readSRPKeyExchange()
 	} else {
-		fmt.Println("Client: read srp server key echange #2")
 		msg, err = c.readHandshake()
 	}
-	fmt.Println("HERE #8", err)
 	if err != nil {
 		return err
 	}
@@ -398,7 +388,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	if ok {
 		hs.finishedHash.Write(skx.marshal())
 		err = keyAgreement.processServerKeyExchange(c.config, hs.hello, hs.serverHello, cert, skx)
-		fmt.Println("HERE #6")
 		if err != nil {
 			c.sendAlert(alertUnexpectedMessage)
 			return err
@@ -406,7 +395,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 
 		msg, err = c.readHandshake()
 		if err != nil {
-			fmt.Println("HERE #7")
 			return err
 		}
 	}
@@ -490,7 +478,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 
 	shd, ok := msg.(*serverHelloDoneMsg)
 	if !ok {
-		fmt.Println("HERE #9", err, msg, shd)
 		c.sendAlert(alertUnexpectedMessage)
 		return unexpectedMessageError(shd, msg)
 	}
@@ -511,7 +498,6 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 	}
 
 	preMasterSecret, ckx, err := keyAgreement.generateClientKeyExchange(c.config, hs.hello, cert)
-	fmt.Printf("Client: (err=%s) preMasterSecret: %x\n", err, preMasterSecret)
 	if err != nil {
 		c.sendAlert(alertInternalError)
 		return err
