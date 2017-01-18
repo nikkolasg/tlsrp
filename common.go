@@ -425,8 +425,8 @@ type Config struct {
 
 	// SRPClient contains the credential informations of the user
 	SRPClient *srp.Client
-	// if true, then the server is expected to send its certificate also before
-	// the server srp key exchange message. By default, SRP does not require any
+	// if true, the client waits the certificate of the server and the server
+	// must sends its certificate.  By default, SRP does not require any
 	// certificate from the server.
 	SRPRequireCert bool
 	// SRPLookup contains the necessary information so the server can lookup

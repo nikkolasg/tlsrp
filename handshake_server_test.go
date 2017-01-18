@@ -576,6 +576,7 @@ func (test *serverTest) run(t *testing.T, write bool) {
 	if config == nil {
 		config = testConfig
 	}
+
 	server := Server(serverConn, config)
 	connStateChan := make(chan ConnectionState, 1)
 	go func() {
@@ -898,6 +899,7 @@ func TestCipherSuiteCertPreferenceECDSA(t *testing.T) {
 		name:   "CipherSuiteCertPreferenceRSA",
 		config: config,
 	}
+
 	runServerTestTLS12(t, test)
 
 	config = testConfig.clone()

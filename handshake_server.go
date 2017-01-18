@@ -204,7 +204,8 @@ Curves:
 		}
 	}
 
-	if !containsSRPCipherSuite(hs.clientHello.cipherSuites) {
+	shouldRequireCert := (containsSRPCipherSuite(hs.clientHello.cipherSuites) && c.config.SRPRequireCert && c.config.SRPLookup != nil) || c.config.SRPLookup == nil
+	if shouldRequireCert {
 		hs.cert, err = config.getCertificate(&ClientHelloInfo{
 			CipherSuites:    hs.clientHello.cipherSuites,
 			ServerName:      hs.clientHello.serverName,
@@ -239,7 +240,6 @@ Curves:
 				return false, fmt.Errorf("tls: unsupported decryption key type (%T)", priv.Public())
 			}
 		}
-
 	}
 
 	if hs.checkForResumption() {
@@ -264,7 +264,6 @@ Curves:
 		c.sendAlert(alertHandshakeFailure)
 		return false, errors.New("tls: no cipher suite supported by both client and server")
 	}
-
 	// See https://tools.ietf.org/html/rfc7507.
 	for _, id := range hs.clientHello.cipherSuites {
 		if id == TLS_FALLBACK_SCSV {
@@ -774,6 +773,9 @@ func (hs *serverHandshakeState) setCipherSuite(id uint16, supportedCipherSuites 
 					candidate = s
 					break
 				}
+			}
+			if isSRPCipherSuite(id) {
+				candidate = srpCipherSuite[0]
 			}
 			if candidate == nil {
 				continue

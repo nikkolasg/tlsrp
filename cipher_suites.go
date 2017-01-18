@@ -261,6 +261,9 @@ func srpAKA(version uint16) keyAgreement {
 func mutualCipherSuite(have []uint16, want uint16) *cipherSuite {
 	for _, id := range have {
 		if id == want {
+			if isSRPCipherSuite(id) {
+				return srpCipherSuite[0]
+			}
 			for _, suite := range cipherSuites {
 				if suite.id == want {
 					return suite

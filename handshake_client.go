@@ -56,22 +56,6 @@ func (c *Conn) clientHandshake() error {
 		return errors.New("tls: NextProtos values too large")
 	}
 
-	possibleCipherSuites := c.config.cipherSuites()
-	var foundSRP bool
-	for _, s := range possibleCipherSuites {
-		if isSRPCipherSuite(s) {
-			foundSRP = true
-			continue
-		}
-		if foundSRP {
-			// XXX can we remove this limitation ?
-			// For the moment, mainly due to the fact that it's needed to know
-			// how to parse the server key exchange message, and the current tls design
-			// does not allow to know the suite in serverKeyExchange.unmarshal() directly.
-			return errors.New("tls: either standards or srp suites can be used at same time")
-		}
-	}
-
 	hello := &clientHelloMsg{
 		vers:                         c.config.maxVersion(),
 		compressionMethods:           []uint8{compressionNone},
@@ -85,6 +69,23 @@ func (c *Conn) clientHandshake() error {
 		secureRenegotiationSupported: true,
 		alpnProtocols:                c.config.NextProtos,
 	}
+	possibleCipherSuites := c.config.cipherSuites()
+	var foundSRP bool
+	for _, s := range possibleCipherSuites {
+		if isSRPCipherSuite(s) {
+			foundSRP = true
+			hello.cipherSuites = append(hello.cipherSuites, s)
+			continue
+		}
+		if foundSRP {
+			// XXX can we remove this limitation ?
+			// For the moment, mainly due to the fact that it's needed to know
+			// how to parse the server key exchange message, and the current tls design
+			// does not allow to know the suite in serverKeyExchange.unmarshal() directly.
+			return errors.New("tls: either standards or srp suites can be used at same time")
+		}
+	}
+
 	if foundSRP {
 		if c.config.SRPClient == nil {
 			return errors.New("tls: missing a valid SRPClient to the config")
@@ -96,21 +97,22 @@ func (c *Conn) clientHandshake() error {
 		hello.secureRenegotiation = c.clientFinished[:]
 	}
 
-	hello.cipherSuites = make([]uint16, 0, len(possibleCipherSuites))
-
-NextCipherSuite:
-	for _, suiteId := range possibleCipherSuites {
-		for _, suite := range cipherSuites {
-			if suite.id != suiteId {
-				continue
+	if !foundSRP {
+		hello.cipherSuites = make([]uint16, 0, len(possibleCipherSuites))
+	NextCipherSuite:
+		for _, suiteId := range possibleCipherSuites {
+			for _, suite := range cipherSuites {
+				if suite.id != suiteId {
+					continue
+				}
+				// Don't advertise TLS 1.2-only cipher suites unless
+				// we're attempting TLS 1.2.
+				if hello.vers < VersionTLS12 && suite.flags&suiteTLS12 != 0 {
+					continue
+				}
+				hello.cipherSuites = append(hello.cipherSuites, suiteId)
+				continue NextCipherSuite
 			}
-			// Don't advertise TLS 1.2-only cipher suites unless
-			// we're attempting TLS 1.2.
-			if hello.vers < VersionTLS12 && suite.flags&suiteTLS12 != 0 {
-				continue
-			}
-			hello.cipherSuites = append(hello.cipherSuites, suiteId)
-			continue NextCipherSuite
 		}
 	}
 
