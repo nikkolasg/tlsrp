@@ -61,6 +61,7 @@ All checks from the RFC are implemented as well as the "hide wrong username"
 ## Inspiration
 
 The idea came from the [Magic
-Wormhole](https://github.com/warner/magic-wormhole) tool by Brian Warner. Since
+Wormhole](https://github.com/warner/magic-wormhole) tool by Brian Warner.
+Unfortunately, I needed a secure transport protocol out of it, and in go. Since
 I did not want to roll up any home-made tls, I chose to follow an already
-existing scheme using password as a pre shared secret.
+existing scheme with proven security and where an RFC already exists.
