@@ -1,7 +1,7 @@
 # tlsrp
 
 This package is a fork of golang/crypto/tls with SRP support. It implements the
-[RFC 5054](https://tools.ietf.org/html/rfc5054) fully.
+[RFC 5054](https://tools.ietf.org/html/rfc5054).
 
 ## Disclaimer
 
