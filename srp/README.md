@@ -15,6 +15,7 @@ example here use an implemented local memory store.
 ```go
 // enter the creds
 db := NewMapLookup()
+// password never stored in clear (hashed with salt)
 db.Add("Serge","Karamazov",Group4096)
 
 server := NewServerInstance(db)
@@ -34,6 +35,7 @@ if err != nil {
 *client*:
 ```go
 // give the material to the client
+// password is not kept in memory, it's directly hashed with salt.
 client,err := NewClient("Serge","Karamazov"
 if err != nil {
     panic(err)
