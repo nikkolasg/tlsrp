@@ -206,7 +206,6 @@ func TestSRP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	clientConf.CipherSuites = []uint16{TLS_SRP_SHA256_WITH_AES_256_GCM_SHA384}
 	conn := Client(c, clientConf)
 	if err := conn.Handshake(); err != nil {
 		t.Error(err)
