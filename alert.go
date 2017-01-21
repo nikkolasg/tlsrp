@@ -38,6 +38,8 @@ const (
 	alertInappropriateFallback  alert = 86
 	alertUserCanceled           alert = 90
 	alertNoRenegotiation        alert = 100
+	//https://tools.ietf.org/html/rfc5054#section-2.9
+	alertUnknownPskIdentity alert = 115
 )
 
 var alertText = map[alert]string{
@@ -64,6 +66,7 @@ var alertText = map[alert]string{
 	alertInappropriateFallback:  "inappropriate fallback",
 	alertUserCanceled:           "user canceled",
 	alertNoRenegotiation:        "no renegotiation",
+	alertUnknownPskIdentity:     "unknown identity",
 }
 
 func (e alert) String() string {

@@ -425,13 +425,19 @@ type Config struct {
 
 	// SRPClient contains the credential informations of the user
 	SRPClient *srp.Client
-	// if true, the client waits the certificate of the server and the server
+	// if true, the client waits the certificate of the server or the server
 	// must sends its certificate.  By default, SRP does not require any
 	// certificate from the server.
 	SRPRequireCert bool
 	// SRPLookup contains the necessary information so the server can lookup
 	// usernames and provide username enumeration defenses
 	SRPLookup srp.Lookup
+	// SRPFakeSeed is used to simulate computational delays and return a
+	// consistent fake response for each username that are not in the database,i.e.
+	// when SRPLookup returns an error. WARNING: If this feature is important in
+	// the context, make sure to use the _same_ seed when you restart the
+	// server. If not set, SRPFakeSeed will be randomly generated.
+	SRPFakeSeed []byte
 }
 
 // ticketKeyNameLen is the number of bytes of identifier that is prepended to
@@ -485,6 +491,7 @@ func (c *Config) clone() *Config {
 		SRPClient:                   c.SRPClient,
 		SRPRequireCert:              c.SRPRequireCert,
 		SRPLookup:                   c.SRPLookup,
+		SRPFakeSeed:                 c.SRPFakeSeed,
 	}
 }
 
@@ -664,6 +671,17 @@ func (c *Config) BuildNameToCertificate() {
 			c.NameToCertificate[san] = cert
 		}
 	}
+}
+
+func (c *Config) GetSRPFakeSeed() []byte {
+	if c.SRPFakeSeed == nil {
+		var p [32]byte
+		if _, err := c.rand().Read(p[:]); err != nil {
+			panic(err)
+		}
+		c.SRPFakeSeed = p[:]
+	}
+	return c.SRPFakeSeed
 }
 
 // A Certificate is a chain of one or more certificates, leaf first.

@@ -95,25 +95,29 @@ func NewClient(username, password string, allowedGroups *Groups) (*Client, error
 	}, err
 }
 
+var ErrInvalidGroup = errors.New("srp: invalid group parameters")
+var ErrUnknownGroup = errors.New("srp: unknown group parameters")
+
 // Material uses the server materials to generate the random component A from
 // the client  as in 2.6 https://tools.ietf.org/html/rfc5054#page-8
 // It returns the shared key, the public part A to send to server, or
-// errInvalidB if the value provided by the // server is wrong (== 0).
+// an error otherwise. It can return ErrInvalidGroup is the group parameters are
+// invalid.
 func (c *Client) KeyExchange(m *ServerMaterial) (key, A []byte, err error) {
 	if !c.allowed.Contains(m.Group) {
-		return nil, nil, errors.New("Unknown group given by server")
+		return nil, nil, ErrUnknownGroup
 
 	}
 
 	if len(m.B) != m.Group.Len() {
-		return nil, nil, errors.New("srp invalid B size")
+		return nil, nil, ErrInvalidGroup
 	} else if len(m.Salt) != SaltSize {
-		return nil, nil, errors.New("srp invalid salt size")
+		return nil, nil, ErrInvalidGroup
 	}
 
 	B := new(big.Int).SetBytes(m.B)
 	if B.Mod(B, m.Group.N).Cmp(zero) == 0 {
-		return nil, nil, errors.New("Invalid B public element from server")
+		return nil, nil, ErrInvalidGroup
 	}
 	c.a = new(big.Int).SetBytes(random(RandSize))
 	c.A = new(big.Int).Exp(m.Group.G, c.a, m.Group.N)

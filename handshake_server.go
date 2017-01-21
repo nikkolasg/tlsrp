@@ -92,6 +92,15 @@ func (c *Conn) serverHandshake() error {
 		if err := hs.readFinished(c.clientFinished[:]); err != nil {
 			return err
 		}
+
+		ka := hs.suite.ka(c.vers)
+		if srpKa, ok := ka.(*srpKeyAgreement); ok {
+			if srpKa.fakeUser {
+				// https://tools.ietf.org/html/rfc5054#section-2.9
+				hs.c.sendAlert(alertBadRecordMAC)
+			}
+		}
+
 		c.clientFinishedIsFirst = true
 		c.buffering = true
 		if err := hs.sendSessionTicket(); err != nil {
@@ -264,6 +273,11 @@ Curves:
 		c.sendAlert(alertHandshakeFailure)
 		return false, errors.New("tls: no cipher suite supported by both client and server")
 	}
+
+	if isSRPCipherSuite(hs.suite.id) && hs.clientHello.srpUser == "" {
+		c.sendAlert(alertUnknownPskIdentity)
+		return false, errors.New("tls: no username using an SRP suite")
+	}
 	// See https://tools.ietf.org/html/rfc7507.
 	for _, id := range hs.clientHello.cipherSuites {
 		if id == TLS_FALLBACK_SCSV {
@@ -321,6 +335,11 @@ func (hs *serverHandshakeState) checkForResumption() bool {
 		return false
 	}
 	if sessionHasClientCerts && c.config.ClientAuth == NoClientCert {
+		return false
+	}
+
+	// https://tools.ietf.org/html/rfc5054#page-6
+	if isSRPCipherSuite(hs.sessionState.cipherSuite) && hs.clientHello.srpUser == "" {
 		return false
 	}
 

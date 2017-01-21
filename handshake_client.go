@@ -17,6 +17,8 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/nikkolasg/tlsrp/srp"
 )
 
 type clientHandshakeState struct {
@@ -391,7 +393,13 @@ func (hs *clientHandshakeState) doFullHandshake() error {
 		hs.finishedHash.Write(skx.marshal())
 		err = keyAgreement.processServerKeyExchange(c.config, hs.hello, hs.serverHello, cert, skx)
 		if err != nil {
-			c.sendAlert(alertUnexpectedMessage)
+			if err == srp.ErrUnknownGroup {
+				c.sendAlert(alertInsufficientSecurity)
+			} else if err == srp.ErrInvalidGroup {
+				c.sendAlert(alertIllegalParameter)
+			} else {
+				c.sendAlert(alertUnexpectedMessage)
+			}
 			return err
 		}
 

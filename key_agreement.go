@@ -8,6 +8,7 @@ import (
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -413,6 +414,7 @@ func (ka *ecdheKeyAgreement) generateClientKeyExchange(config *Config, clientHel
 type srpKeyAgreement struct {
 	version     uint16
 	srpInstance *srp.ServerInstance
+	fakeUser    bool
 }
 
 func (s *srpKeyAgreement) processServerKeyExchange(c *Config, ch *clientHelloMsg, sh *serverHelloMsg, cert *x509.Certificate, skx *serverKeyExchangeMsg) error {
@@ -447,8 +449,15 @@ func (s *srpKeyAgreement) generateServerKeyExchange(c *Config, cert *Certificate
 		return nil, errors.New("tls: missing srp lookup")
 	}
 	s.srpInstance = srp.NewServerInstance(c.SRPLookup)
-	mat, err := s.srpInstance.KeyExchange(ch.srpUser)
-	if err != nil {
+
+	// fake seed
+	h := hmac.New(srp.HashFunc, c.GetSRPFakeSeed())
+	h.Write([]byte("salt"))
+	h.Write([]byte(ch.srpUser))
+	mat, err := s.srpInstance.KeyExchange(ch.srpUser, h.Sum(nil))
+	if err == srp.ErrUnknownUser {
+		s.fakeUser = true
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -469,5 +478,7 @@ func (s *srpKeyAgreement) processClientKeyExchange(c *Config, cert *Certificate,
 	if ckex.A == nil {
 		return nil, errors.New("tls: no A given in client key exchange")
 	}
+	// NOTE: can't directly send an bad record mac error, must proceed as usual
+	// and then do a special case in the handshake() method.
 	return s.srpInstance.Key(ckex.A)
 }
