@@ -25,7 +25,11 @@ func repeat(s string, n int) string {
 func TestExchange(t *testing.T) {
 	var fakeU = "Luke"
 	var fakeP = "theforce"
-	var group = Group2048
+	var group = Group3072
+
+	var wrongU = "Dark"
+	var fakeSalt = random(32)
+
 	db := NewMapLookup()
 	db.Add(fakeU, fakeP, group)
 
@@ -33,7 +37,7 @@ func TestExchange(t *testing.T) {
 	client, err := NewClient(fakeU, fakeP, &RFCGroups)
 	require.Nil(t, err)
 
-	smat, err := server.KeyExchange(fakeU)
+	smat, err := server.KeyExchange(fakeU, nil)
 	require.Nil(t, err)
 
 	keyC, A, err := client.KeyExchange(smat)
@@ -42,6 +46,18 @@ func TestExchange(t *testing.T) {
 	keyS, err := server.Key(A)
 	require.Nil(t, err)
 	require.Equal(t, keyC, keyS)
+
+	server = NewServerInstance(db)
+	smat, err = server.KeyExchange(wrongU, fakeSalt)
+	require.Equal(t, err, ErrUnknownUser)
+	require.NotNil(t, server.B)
+	require.NotNil(t, smat)
+
+	server = NewServerInstance(db)
+	smat, err = server.KeyExchange(wrongU, nil)
+	require.Equal(t, err, ErrUnknownUser)
+	require.Nil(t, server.B)
+	require.Nil(t, smat)
 
 }
 
@@ -151,7 +167,7 @@ func testRandom(t *testing.T, r io.Reader, l int, p bool) {
 
 func TestMapLookup(t *testing.T) {
 	db := NewMapLookup()
-	var group = Group2048
+	var group = Group3072
 	var uname = "ender"
 	var pwd = "game"
 	db.Add(uname, pwd, group)

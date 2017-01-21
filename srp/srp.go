@@ -179,11 +179,28 @@ var ErrUnknownUser = errors.New("username provided is not known")
 
 // KeyExchange proceeds to the key exchange part from the server's point of
 // view. It computes B = k * v + g^b % N and returns the information needed by
-// the Client to pursue.
-func (s *ServerInstance) KeyExchange(username string) (*ServerMaterial, error) {
+// the Client to pursue. fakseSalt is used when the username is invalid: in that
+// case, the server will simulate computation as usual in order to avoid timing
+// attacks. If fakeSalt is nil, it directly returns and do NO DO this fake
+// computations. In any cases, if the username is invalid, it returns
+// ErrUnknownUser.
+func (s *ServerInstance) KeyExchange(username string, fakeSalt []byte) (*ServerMaterial, error) {
+	var err error
 	info, ok := s.db.Fetch(username)
 	if !ok {
-		return nil, ErrUnknownUser
+		// simulate computations to avoid timing attacks when caller wants to
+		// hide that the username is invalid
+		err = ErrUnknownUser
+		if fakeSalt == nil {
+			return nil, err
+		}
+		info = &UserInfo{
+			Verifier: &Verifier{
+				Salt: fakeSalt,
+				Hash: random(32),
+			},
+			Group: Group4096,
+		}
 	}
 	s.info = info
 	group := info.Group
@@ -197,7 +214,7 @@ func (s *ServerInstance) KeyExchange(username string) (*ServerMaterial, error) {
 		Salt:  info.Verifier.Salt,
 		Group: info.Group,
 		B:     s.B.Bytes(),
-	}, nil
+	}, err
 }
 
 // Key returns the shared key given the A public client's information or an
