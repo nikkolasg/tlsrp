@@ -17,7 +17,7 @@ steps you can setup a password protected communication channel between two parti
 
 ```go
 import "github.com/nikkolasg/tlsrp"
-import "github.com/nikkolasg/tlsrp/srp
+import "github.com/nikkolasg/tlsrp/srp"
 
 // register user / password pairs ( hashed + salted ) 
 m := srp.NewMapLookup()
