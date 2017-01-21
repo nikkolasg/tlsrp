@@ -46,7 +46,7 @@ if err != nil {
 ```
 
 *server*:
-```
+```go
 keyS,err := server.Key(A)
 if err != nil {
     panic(err)
