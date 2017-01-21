@@ -47,7 +47,7 @@ if err != nil {
 }
 
 // from now on, you can use the conn as usual. If there is an error in the SRP
-handshake, it will show up.
+// handshake, it will show up.
 ```
 
 ## Implementation
