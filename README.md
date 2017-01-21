@@ -53,7 +53,8 @@ handshake, it will show up.
 ## Implementation
 
 I tried to touch as little as possible to the tls implementation. I found out
-that it was more difficult than expected. However, all tests are passing.
+that it was more difficult than expected. All components are deeply tighted
+together. However, all tests are passing.
 
 All checks from the RFC are implemented as well as the "hide wrong username"
 [feature](https://tools.ietf.org/html/rfc5054#page-6).
